@@ -7,10 +7,8 @@ use ratatui::symbols::border;
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Widget};
 use std::process::ExitCode;
-use std::time::Duration;
 use thiserror::Error;
 use tokio::select;
-use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
 
 fn main() -> ExitCode {
@@ -29,6 +27,7 @@ fn main() -> ExitCode {
     // Initialize application.
     let term = ratatui::init();
     let app = App {
+        redraw: true,
         running: CancellationToken::new(),
     };
 
@@ -48,28 +47,25 @@ fn main() -> ExitCode {
 
 /// Global states for program.
 struct App {
+    redraw: bool,
     running: CancellationToken,
 }
 
 impl App {
-    const FPS: f32 = 1.0;
-
     async fn run(mut self, mut term: DefaultTerminal) -> Result<(), AppError> {
         // Dispatch event til exit.
-        let redraw = Duration::from_secs_f32(1.0 / Self::FPS);
-        let mut redraw = tokio::time::interval(redraw);
         let mut events = EventStream::new();
 
-        redraw.set_missed_tick_behavior(MissedTickBehavior::Delay);
-
         loop {
+            if std::mem::take(&mut self.redraw)
+                && let Err(e) = term.draw(|f| f.render_widget(&self, f.area()))
+            {
+                return Err(AppError::Draw(e));
+            }
+
             select! {
                 biased;
                 _ = self.running.cancelled() => break Ok(()),
-                _ = redraw.tick() => match term.draw(|f| f.render_widget(&self, f.area())) {
-                    Ok(_) => (),
-                    Err(e) => break Err(AppError::Draw(e)),
-                },
                 v = events.next() => match v {
                     Some(Ok(e)) => self.dispatch_event(e),
                     Some(Err(e)) => break Err(AppError::WaitForEvent(e)),
@@ -85,6 +81,7 @@ impl App {
                 KeyCode::Char('q') | KeyCode::Char('Q') => self.running.cancel(),
                 _ => (),
             },
+            Event::Resize(_, _) => self.redraw = true,
             _ => (),
         }
     }
