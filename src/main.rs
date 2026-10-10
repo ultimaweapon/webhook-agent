@@ -26,14 +26,14 @@ fn main() -> ExitCode {
         }
     };
 
-    // Initialize UI.
+    // Initialize application.
     let term = ratatui::init();
-    let ui = Ui {
+    let app = App {
         running: CancellationToken::new(),
     };
 
     // Run.
-    let exit = tokio.block_on(ui.run(term));
+    let exit = tokio.block_on(app.run(term));
 
     ratatui::restore();
 
@@ -46,11 +46,12 @@ fn main() -> ExitCode {
     }
 }
 
-struct Ui {
+/// Global states for program.
+struct App {
     running: CancellationToken,
 }
 
-impl Ui {
+impl App {
     const FPS: f32 = 1.0;
 
     async fn run(mut self, mut term: DefaultTerminal) -> Result<(), AppError> {
@@ -89,7 +90,7 @@ impl Ui {
     }
 }
 
-impl Widget for &Ui {
+impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer)
     where
         Self: Sized,
@@ -105,6 +106,7 @@ impl Widget for &Ui {
     }
 }
 
+/// Reason why [App] fails no run.
 #[derive(Debug, Error)]
 enum AppError {
     #[error("couldn't wait for terminal event")]
