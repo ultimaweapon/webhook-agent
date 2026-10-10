@@ -1,3 +1,4 @@
+use self::config::Config;
 use crossterm::event::{Event, EventStream, KeyCode};
 use erdp::ErrorDisplay;
 use futures::StreamExt;
@@ -6,12 +7,34 @@ use ratatui::prelude::{Buffer, Rect, Stylize};
 use ratatui::symbols::border;
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Widget};
+use std::fs::File;
 use std::process::ExitCode;
 use thiserror::Error;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 
+mod config;
+
 fn main() -> ExitCode {
+    // Open configuration file.
+    let path = "config.yml";
+    let config = match File::open(path) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Failed to open {}: {}.", path, e.display());
+            return ExitCode::FAILURE;
+        }
+    };
+
+    // Load configuration.
+    let config = match serde_yaml::from_reader(config) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Failed to load {}: {}.", path, e.display());
+            return ExitCode::FAILURE;
+        }
+    };
+
     // Build async runtime.
     let tokio = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -27,6 +50,7 @@ fn main() -> ExitCode {
     // Initialize application.
     let term = ratatui::init();
     let app = App {
+        config,
         redraw: true,
         running: CancellationToken::new(),
     };
@@ -47,6 +71,7 @@ fn main() -> ExitCode {
 
 /// Global states for program.
 struct App {
+    config: Config,
     redraw: bool,
     running: CancellationToken,
 }
@@ -92,7 +117,7 @@ impl Widget for &App {
     where
         Self: Sized,
     {
-        let title = Line::from(" Webhook Agent ".bold());
+        let title = Line::from(format!(" {} ", self.config.github_username).bold());
         let instructions = Line::from(vec![" Quit ".into(), "<Q> ".blue().bold()]);
         let block = Block::bordered()
             .title(title.centered())
